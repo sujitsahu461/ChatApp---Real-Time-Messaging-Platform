@@ -65,7 +65,7 @@ def signup(request):
 
         # Print OTP to terminal for testing
         print(f"\n{'='*50}")
-        print(f"  📱 OTP for {phone}: {code}")
+        print(f"  OTP for {phone}: {code}")
         print(f"{'='*50}\n")
 
         # Store in session for OTP verification page
