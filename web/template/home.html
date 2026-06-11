@@ -4,112 +4,606 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Home</title>
+    <title>ChatApp</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
         body {
-            font-family: Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
+            font-family: 'Inter', sans-serif;
+            background: #111b21;
+            height: 100vh;
             display: flex;
-            justify-content: center;
+            overflow: hidden;
+        }
+
+        /* ========== SIDEBAR ========== */
+        .sidebar {
+            width: 360px;
+            min-width: 300px;
+            background: #202c33;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid #2a3942;
+        }
+
+        .sidebar-header {
+            background: #202c33;
+            padding: 12px 16px;
+            display: flex;
             align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #2a3942;
         }
-        .container {
-            background-color: white;
-            padding: 50px;
-            border-radius: 8px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-            text-align: center;
-        }
-        h1 {
-            color: #333;
-            margin-bottom: 20px;
-        }
-        .user-info {
-            color: #666;
-            font-size: 18px;
-            margin-bottom: 30px;
-        }
-        .logout-btn {
-            padding: 12px 30px;
-            background-color: #e74c3c;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: background-color 0.3s;
-            text-decoration: none;
-            display: inline-block;
-        }
-        .logout-btn:hover {
-            background-color: #c0392b;
-        }
-        .upload-form {
-            margin-top: 30px;
-        }
-        .upload-form input[type="file"] {
-            margin: 10px 0;
-        }
-        .upload-form button {
-            padding: 10px 20px;
-            background-color: #667eea;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-        .upload-form button:hover {
-            background-color: #764ba2;
-        }
-        .profile-pic {
-            margin: 20px 0;
-        }
-        .profile-pic img {
-            width: 150px;
-            height: 150px;
+
+        .my-avatar {
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
             object-fit: cover;
-            border: 5px solid #667eea;
-            display: block;
-            margin: 20px auto;
+            cursor: pointer;
+            border: 2px solid #00a884;
         }
-        .no-pic {
-            color: #999;
+
+        .my-avatar-placeholder {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #00a884;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .sidebar-title {
+            color: #e9edef;
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .header-icons { display: flex; gap: 8px; }
+
+        .icon-btn {
+            background: none;
+            border: none;
+            color: #aebac1;
+            cursor: pointer;
+            padding: 6px;
+            border-radius: 50%;
+            font-size: 20px;
+            transition: background 0.2s, color 0.2s;
+        }
+        .icon-btn:hover { background: #2a3942; color: #e9edef; }
+
+        .search-bar {
+            padding: 8px 12px;
+            background: #202c33;
+            border-bottom: 1px solid #2a3942;
+        }
+
+        .search-bar input {
+            width: 100%;
+            background: #2a3942;
+            border: none;
+            border-radius: 8px;
+            padding: 9px 12px 9px 36px;
+            color: #e9edef;
             font-size: 14px;
-            margin: 20px 0;
+            font-family: 'Inter', sans-serif;
+            outline: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23aebac1'%3E%3Cpath d='M21.71 20.29L18 16.61A9 9 0 1 0 16.61 18l3.68 3.68a1 1 0 0 0 1.42-1.39zM11 18a7 7 0 1 1 7-7 7 7 0 0 1-7 7z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: 10px center;
+            background-size: 16px;
         }
+        .search-bar input::placeholder { color: #8696a0; }
+
+        .contacts-list {
+            flex: 1;
+            overflow-y: auto;
+        }
+        .contacts-list::-webkit-scrollbar { width: 4px; }
+        .contacts-list::-webkit-scrollbar-thumb { background: #374045; border-radius: 4px; }
+
+        .contact-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            cursor: pointer;
+            border-bottom: 1px solid #2a3942;
+            transition: background 0.15s;
+            gap: 12px;
+            position: relative;
+        }
+        .contact-item:hover { background: #2a3942; }
+        .contact-item.active { background: #2a3942; }
+
+        .contact-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+
+        .contact-avatar-placeholder {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: #6b7c85;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .contact-info { flex: 1; min-width: 0; }
+
+        .contact-name {
+            color: #e9edef;
+            font-size: 15px;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .contact-last-msg {
+            color: #8696a0;
+            font-size: 13px;
+            margin-top: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .contact-meta {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 4px;
+        }
+
+        .contact-time {
+            color: #8696a0;
+            font-size: 11px;
+        }
+
+        .unread-badge {
+            background: #00a884;
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* ========== CHAT PANEL ========== */
+        .chat-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #0b141a;
+        }
+
+        /* Welcome screen */
+        .welcome-screen {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #8696a0;
+            gap: 16px;
+        }
+
+        .welcome-screen .logo {
+            font-size: 80px;
+        }
+
+        .welcome-screen h2 {
+            color: #e9edef;
+            font-size: 28px;
+            font-weight: 300;
+        }
+
+        .welcome-screen p {
+            font-size: 14px;
+            text-align: center;
+            max-width: 360px;
+            line-height: 1.6;
+        }
+
+        /* Chat header */
+        .chat-header {
+            background: #202c33;
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-bottom: 1px solid #2a3942;
+        }
+
+        .chat-header .contact-avatar,
+        .chat-header .contact-avatar-placeholder {
+            width: 40px;
+            height: 40px;
+            font-size: 15px;
+        }
+
+        .chat-header-info { flex: 1; }
+
+        .chat-header-name {
+            color: #e9edef;
+            font-size: 15px;
+            font-weight: 500;
+        }
+
+        .chat-header-status {
+            color: #8696a0;
+            font-size: 12px;
+        }
+
+        /* Messages area */
+        .messages-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px 60px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Crect width='300' height='300' fill='%230b141a'/%3E%3Cg opacity='0.03'%3E%3Cpath d='M50 50 Q75 25 100 50 Q125 75 150 50' stroke='%2300a884' stroke-width='1' fill='none'/%3E%3C/g%3E%3C/svg%3E");
+        }
+        .messages-area::-webkit-scrollbar { width: 4px; }
+        .messages-area::-webkit-scrollbar-thumb { background: #374045; border-radius: 4px; }
+
+        .msg-date-divider {
+            text-align: center;
+            margin: 12px 0;
+        }
+        .msg-date-divider span {
+            background: #182229;
+            color: #8696a0;
+            font-size: 12px;
+            padding: 4px 12px;
+            border-radius: 8px;
+        }
+
+        .message-wrapper {
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+            margin-bottom: 2px;
+        }
+        .message-wrapper.sent { flex-direction: row-reverse; }
+
+        .msg-avatar {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+        .msg-avatar-placeholder {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: #6b7c85;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 11px;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+
+        .message-bubble {
+            max-width: 65%;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            line-height: 1.5;
+            position: relative;
+            word-wrap: break-word;
+        }
+
+        .message-bubble.received {
+            background: #202c33;
+            color: #e9edef;
+            border-top-left-radius: 0;
+        }
+
+        .message-bubble.sent {
+            background: #005c4b;
+            color: #e9edef;
+            border-top-right-radius: 0;
+        }
+
+        .message-bubble .msg-time {
+            font-size: 11px;
+            color: #8696a0;
+            float: right;
+            margin-left: 8px;
+            margin-top: 4px;
+        }
+
+        .message-bubble.sent .msg-time { color: #8aada4; }
+
+        /* Message input */
+        .message-input-area {
+            background: #202c33;
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .message-input-area input {
+            flex: 1;
+            background: #2a3942;
+            border: none;
+            border-radius: 10px;
+            padding: 12px 16px;
+            color: #e9edef;
+            font-size: 15px;
+            font-family: 'Inter', sans-serif;
+            outline: none;
+        }
+        .message-input-area input::placeholder { color: #8696a0; }
+
+        .send-btn {
+            background: #00a884;
+            border: none;
+            border-radius: 50%;
+            width: 46px;
+            height: 46px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+            flex-shrink: 0;
+        }
+        .send-btn:hover { background: #00c49e; transform: scale(1.05); }
+        .send-btn svg { fill: white; }
+
+        /* ========== PROFILE MODAL ========== */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.open { display: flex; }
+
+        .modal {
+            background: #202c33;
+            border-radius: 12px;
+            padding: 32px;
+            width: 360px;
+            text-align: center;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+        }
+
+        .modal h3 {
+            color: #e9edef;
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+
+        .modal-avatar-preview {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid #00a884;
+            margin: 0 auto 20px;
+            display: block;
+        }
+
+        .modal-avatar-placeholder {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background: #6b7c85;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 36px;
+            font-weight: 600;
+            margin: 0 auto 20px;
+        }
+
+        .modal-username {
+            color: #00a884;
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        .modal form { display: flex; flex-direction: column; gap: 12px; }
+
+        .file-label {
+            background: #2a3942;
+            border: 1px dashed #00a884;
+            border-radius: 8px;
+            padding: 12px;
+            color: #aebac1;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background 0.2s;
+        }
+        .file-label:hover { background: #374045; }
+
+        .file-input { display: none; }
+
+        .upload-btn {
+            background: #00a884;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            transition: background 0.2s;
+        }
+        .upload-btn:hover { background: #00c49e; }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: #8696a0;
+            font-size: 13px;
+            cursor: pointer;
+            margin-top: 8px;
+            font-family: 'Inter', sans-serif;
+        }
+        .modal-close:hover { color: #e9edef; }
+
+        .signout-btn {
+            background: #ff4444;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            transition: background 0.2s;
+        }
+        .signout-btn:hover { background: #cc0000; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Hello {{ request.user }}</h1>
-        
-        <div class="profile-pic">
-            {% if request.user.userprofile.profile_pic %}
-                <img src="{{ request.user.userprofile.profile_pic.url }}" alt="Profile Picture">
-            {% else %}
-                <p class="no-pic">No profile picture yet</p>
-            {% endif %}
+
+<!-- ========== SIDEBAR ========== -->
+<div class="sidebar">
+    <div class="sidebar-header">
+        <!-- My avatar (click to open profile modal) -->
+        {% if request.user.userprofile.profile_pic %}
+            <img class="my-avatar" src="{{ request.user.userprofile.profile_pic.url }}" alt="me" onclick="openProfileModal()">
+        {% else %}
+            <div class="my-avatar-placeholder" onclick="openProfileModal()">
+                {{ request.user.username|first|upper }}
+            </div>
+        {% endif %}
+
+        <span class="sidebar-title">ChatApp</span>
+
+        <div class="header-icons">
+            <button class="icon-btn" title="Sign Out" onclick="window.location='/signout/'">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/>
+                </svg>
+            </button>
         </div>
-        
-        <form method="post" action="/upload/" enctype="multipart/form-data" class="upload-form">
-            {% csrf_token %}
-            <label>Upload/Change Profile Picture:</label><br>
-            <input type="file" name="pic" accept="image/*" required><br>
-            <button type="submit">upload</button>
-        </form>
-        
-        <br><a href="/signout/">signout</a>
     </div>
+
+    <div class="search-bar">
+        <input type="text" id="searchInput" placeholder="Search or start new chat" oninput="filterContacts()">
+    </div>
+
+    <div class="contacts-list" id="contactsList">
+        {% for user in users %}
+        <div class="contact-item" id="contact-{{ user.id }}" onclick="openChat({{ user.id }}, '{{ user.username }}', '{% if user.userprofile.profile_pic %}{{ user.userprofile.profile_pic.url }}{% endif %}')">
+            {% if user.userprofile.profile_pic %}
+                <img class="contact-avatar" src="{{ user.userprofile.profile_pic.url }}" alt="{{ user.username }}">
+            {% else %}
+                <div class="contact-avatar-placeholder">{{ user.username|first|upper }}</div>
+            {% endif %}
+            <div class="contact-info">
+                <div class="contact-name">{{ user.username }}</div>
+                <div class="contact-last-msg" id="last-msg-{{ user.id }}">Click to start chatting</div>
+            </div>
+            <div class="contact-meta">
+                <span class="contact-time" id="last-time-{{ user.id }}"></span>
+                <span class="unread-badge" id="unread-{{ user.id }}" style="display:none"></span>
+            </div>
+        </div>
+        {% empty %}
+        <div style="color:#8696a0; text-align:center; padding:40px 16px; font-size:14px;">
+            No other users yet.<br>Share the signup link!
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- ========== CHAT PANEL ========== -->
+<div class="chat-panel" id="chatPanel">
+    <!-- Welcome screen -->
+    <div class="welcome-screen" id="welcomeScreen">
+        <div class="logo">💬</div>
+        <h2>ChatApp Web</h2>
+        <p>Select a contact on the left to start chatting. Your messages are end-to-end encrypted.</p>
+    </div>
+
+    <!-- Chat area (hidden until contact selected) -->
+    <div id="chatArea" style="display:none; flex-direction:column; height:100%;">
+        <div class="chat-header" id="chatHeader">
+            <div id="chatHeaderAvatar"></div>
+            <div class="chat-header-info">
+                <div class="chat-header-name" id="chatHeaderName"></div>
+                <div class="chat-header-status">online</div>
+            </div>
+        </div>
+
+        <div class="messages-area" id="messagesArea"></div>
+
+        <div class="message-input-area">
+            <input type="text" id="messageInput" placeholder="Type a message" onkeydown="handleKeyDown(event)">
+            <button class="send-btn" onclick="sendMessage()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24">
+                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ========== PROFILE MODAL ========== -->
+<div class="modal-overlay" id="profileModal">
+    <div class="modal">
+        <h3>Your Profile</h3>
+        {% if request.user.userprofile.profile_pic %}
+            <img class="modal-avatar-preview" src="{{ request.user.userprofile.profile_pic.url }}" alt="profile" id="modalPreviewImg">
+        {% else %}
+            <div class="modal-avatar-placeholder" id="modalPreviewPlaceholder">{{ request.user.username|first|upper }}</div>
+        {% endif %}
+        <div class="modal-username">@{{ request.user.username }}</div>
+        <form method="post" action="/upload/" enctype="multipart/form-data">
+            {% csrf_token %}
+            <label class="file-label" for="picInput">📷 Choose Profile Picture</label>
+            <input class="file-input" type="file" id="picInput" name="pic" accept="image/*" onchange="previewImage(this)">
+            <button class="upload-btn" type="submit">Save Photo</button>
+        </form>
+        <button class="modal-close" onclick="closeProfileModal()">Cancel</button>
+    </div>
+</div>
+
+<script src="{% static 'webapp/home.js' %}"></script>
+<script>
+    // Pass Django data to JS
+    const CURRENT_USER_ID = {{ request.user.id }};
+    const CSRF_TOKEN = '{{ csrf_token }}';
+</script>
 </body>
 </html>
