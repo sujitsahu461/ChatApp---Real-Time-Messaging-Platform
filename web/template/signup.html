@@ -100,6 +100,27 @@
         input:focus { border-color: #00a884; }
         input::placeholder { color: #8696a0; font-size: 14px; }
 
+        .phone-input-wrapper {
+            display: flex;
+            gap: 8px;
+        }
+
+        .country-code {
+            width: 80px;
+            background: #2a3942;
+            border: 1px solid #2a3942;
+            border-radius: 8px;
+            padding: 14px 10px;
+            color: #e9edef;
+            font-size: 15px;
+            font-family: 'Inter', sans-serif;
+            outline: none;
+            text-align: center;
+        }
+        .country-code:focus { border-color: #00a884; }
+
+        .phone-input-wrapper input { flex: 1; }
+
         .submit-btn {
             width: 100%;
             background: #00a884;
@@ -167,6 +188,14 @@
                     <p class="hint">Others will see this name in chat</p>
                 </div>
                 <div class="form-group">
+                    <label for="phone">Phone Number</label>
+                    <div class="phone-input-wrapper">
+                        <input class="country-code" type="text" value="+91" readonly>
+                        <input type="tel" id="phone" name="phone" placeholder="Enter phone number" required pattern="[0-9]{10}" maxlength="10">
+                    </div>
+                    <p class="hint">We'll send an OTP to verify your number</p>
+                </div>
+                <div class="form-group">
                     <label for="password">Password</label>
                     <input type="password" id="password" name="password" placeholder="Create a password" required>
                 </div>
@@ -174,7 +203,7 @@
                     <label for="confirmpassword">Confirm Password</label>
                     <input type="password" id="confirmpassword" name="confirmpassword" placeholder="Repeat your password" required>
                 </div>
-                <button class="submit-btn" type="submit">Create Account</button>
+                <button class="submit-btn" type="submit">Send OTP →</button>
             </form>
 
             <p class="alt-link">Already have an account? <a href="/signin/">Sign In</a></p>

@@ -1,21 +1,140 @@
 // ============================================================
-// ChatApp — WhatsApp-style chat JS
+// ChatApp — WebSocket-powered chat + Browser Notifications
 // ============================================================
 
 let activeUserId = null;
 let activeUserName = null;
 let activeUserPic = null;
-let pollingInterval = null;
-let lastMessageId = 0;
+let chatSocket = null;
+let notifSocket = null;
+let notifToastTimeout = null;
 
-// ---- Open a chat with a user ----
+// ============================================================
+// NOTIFICATION SYSTEM — connects on page load
+// ============================================================
+
+function connectNotifications() {
+    const wsScheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    notifSocket = new WebSocket(`${wsScheme}://${window.location.host}/ws/notifications/`);
+
+    notifSocket.onopen = () => {
+        console.log('🔔 Notification WebSocket connected');
+    };
+
+    notifSocket.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        if (data.type === 'notification') {
+            const msg = data.message;
+            // Don't notify if we're already chatting with this person
+            if (msg.sender_id === activeUserId) return;
+
+            // Show in-app toast
+            showNotificationToast(msg);
+
+            // Show browser notification
+            showBrowserNotification(msg);
+
+            // Update unread badge
+            const badge = document.getElementById('unread-' + msg.sender_id);
+            if (badge) {
+                const current = parseInt(badge.textContent) || 0;
+                badge.textContent = current + 1;
+                badge.style.display = 'flex';
+            }
+
+            // Update sidebar preview
+            const preview = document.getElementById('last-msg-' + msg.sender_id);
+            const timeEl = document.getElementById('last-time-' + msg.sender_id);
+            if (preview) preview.textContent = msg.content;
+            if (timeEl) timeEl.textContent = msg.timestamp;
+        }
+    };
+
+    notifSocket.onclose = () => {
+        console.log('🔔 Notification WebSocket disconnected, reconnecting...');
+        setTimeout(connectNotifications, 3000);
+    };
+
+    notifSocket.onerror = (err) => {
+        console.error('Notification WS error:', err);
+    };
+}
+
+// Request browser notification permission
+function requestNotificationPermission() {
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
+}
+
+// Show browser notification
+function showBrowserNotification(msg) {
+    if ('Notification' in window && Notification.permission === 'granted') {
+        const notif = new Notification(`💬 ${msg.sender_username}`, {
+            body: msg.content,
+            icon: msg.sender_pic || undefined,
+            tag: `chat-${msg.sender_id}`,
+            silent: false,
+        });
+        notif.onclick = () => {
+            window.focus();
+            // Open chat with this user
+            const contactEl = document.getElementById('contact-' + msg.sender_id);
+            if (contactEl) {
+                const pic = contactEl.dataset.pic || '';
+                openChat(msg.sender_id, msg.sender_username, pic);
+            }
+            notif.close();
+        };
+        setTimeout(() => notif.close(), 5000);
+    }
+}
+
+// Show in-app notification toast
+function showNotificationToast(msg) {
+    const toast = document.getElementById('notifToast');
+    const avatarArea = document.getElementById('toastAvatarArea');
+    const nameEl = document.getElementById('toastName');
+    const msgEl = document.getElementById('toastMsg');
+
+    if (msg.sender_pic) {
+        avatarArea.innerHTML = `<img class="toast-avatar" src="${msg.sender_pic}" alt="${msg.sender_username}">`;
+    } else {
+        avatarArea.innerHTML = `<div class="toast-avatar-placeholder">${msg.sender_username[0].toUpperCase()}</div>`;
+    }
+    nameEl.textContent = msg.sender_username;
+    msgEl.textContent = msg.content;
+
+    // Click toast to open chat
+    toast.onclick = () => {
+        hideNotificationToast();
+        const contactEl = document.getElementById('contact-' + msg.sender_id);
+        if (contactEl) {
+            const pic = contactEl.dataset.pic || '';
+            openChat(msg.sender_id, msg.sender_username, pic);
+        }
+    };
+
+    toast.classList.add('show');
+
+    if (notifToastTimeout) clearTimeout(notifToastTimeout);
+    notifToastTimeout = setTimeout(hideNotificationToast, 4000);
+}
+
+function hideNotificationToast() {
+    document.getElementById('notifToast').classList.remove('show');
+}
+
+// ============================================================
+// CHAT WebSocket
+// ============================================================
+
 function openChat(userId, username, picUrl) {
     activeUserId = userId;
     activeUserName = username;
     activeUserPic = picUrl;
-    lastMessageId = 0;
 
-    // Mark contact as active in sidebar
+    // Mark contact as active
     document.querySelectorAll('.contact-item').forEach(el => el.classList.remove('active'));
     const contactEl = document.getElementById('contact-' + userId);
     if (contactEl) contactEl.classList.add('active');
@@ -41,68 +160,115 @@ function openChat(userId, username, picUrl) {
     // Clear messages
     document.getElementById('messagesArea').innerHTML = '';
 
-    // Load messages immediately
-    fetchMessages();
+    // Close existing chat socket
+    if (chatSocket) {
+        chatSocket.close();
+        chatSocket = null;
+    }
 
-    // Start polling every 2 seconds
-    if (pollingInterval) clearInterval(pollingInterval);
-    pollingInterval = setInterval(fetchMessages, 2000);
+    // Open WebSocket for this chat
+    const wsScheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    chatSocket = new WebSocket(`${wsScheme}://${window.location.host}/ws/chat/${userId}/`);
 
-    // Focus input
-    document.getElementById('messageInput').focus();
-}
+    const connStatus = document.getElementById('connStatus');
 
-// ---- Fetch messages from server ----
-function fetchMessages() {
-    if (!activeUserId) return;
+    chatSocket.onopen = () => {
+        console.log(`💬 Chat WebSocket connected with ${username}`);
+        connStatus.classList.remove('disconnected');
+    };
 
-    fetch(`/get_messages/${activeUserId}/`)
-        .then(res => res.json())
-        .then(data => {
-            if (!data.messages) return;
+    chatSocket.onmessage = (e) => {
+        const data = JSON.parse(e.data);
 
+        if (data.type === 'history') {
+            // Render all history messages
             const area = document.getElementById('messagesArea');
-            const isAtBottom = area.scrollHeight - area.scrollTop <= area.clientHeight + 60;
-
-            // Only render new messages
-            const newMessages = data.messages.filter(m => m.id > lastMessageId);
-            if (newMessages.length === 0) return;
-
-            newMessages.forEach(msg => {
-                lastMessageId = Math.max(lastMessageId, msg.id);
+            area.innerHTML = '';
+            data.messages.forEach(msg => {
                 const isSent = msg.sender_id === CURRENT_USER_ID;
                 appendMessage(msg, isSent, area);
             });
+            area.scrollTop = area.scrollHeight;
 
-            // Update sidebar preview
-            const lastMsg = data.messages[data.messages.length - 1];
-            if (lastMsg) {
+            // Update sidebar preview from last message
+            if (data.messages.length > 0) {
+                const lastMsg = data.messages[data.messages.length - 1];
                 const preview = document.getElementById('last-msg-' + activeUserId);
                 const timeEl = document.getElementById('last-time-' + activeUserId);
                 if (preview) preview.textContent = lastMsg.content;
                 if (timeEl) timeEl.textContent = lastMsg.timestamp;
             }
+        }
 
-            // Auto-scroll if user was near bottom
-            if (isAtBottom) {
-                area.scrollTop = area.scrollHeight;
+        if (data.type === 'message') {
+            const msg = data.message;
+            const isSent = msg.sender_id === CURRENT_USER_ID;
+            const area = document.getElementById('messagesArea');
+            appendMessage(msg, isSent, area);
+            area.scrollTop = area.scrollHeight;
+
+            // Update sidebar
+            const preview = document.getElementById('last-msg-' + activeUserId);
+            const timeEl = document.getElementById('last-time-' + activeUserId);
+            if (preview) preview.textContent = msg.content;
+            if (timeEl) timeEl.textContent = msg.timestamp;
+        }
+    };
+
+    chatSocket.onclose = () => {
+        console.log('💬 Chat WebSocket disconnected');
+        connStatus.classList.add('disconnected');
+        connStatus.textContent = '🔄 Reconnecting...';
+        // Auto-reconnect after 3 seconds if chat is still active
+        setTimeout(() => {
+            if (activeUserId === userId) {
+                openChat(userId, username, picUrl);
             }
-        })
-        .catch(err => console.error('Fetch messages error:', err));
+        }, 3000);
+    };
+
+    chatSocket.onerror = (err) => {
+        console.error('Chat WS error:', err);
+    };
+
+    // Focus input
+    document.getElementById('messageInput').focus();
 }
 
-// ---- Append a single message bubble ----
+// ============================================================
+// SEND MESSAGE
+// ============================================================
+
+function sendMessage() {
+    const input = document.getElementById('messageInput');
+    const content = input.value.trim();
+    if (!content || !chatSocket || chatSocket.readyState !== WebSocket.OPEN) return;
+
+    chatSocket.send(JSON.stringify({ message: content }));
+    input.value = '';
+    input.focus();
+}
+
+function handleKeyDown(event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+    }
+}
+
+// ============================================================
+// MESSAGE RENDERING
+// ============================================================
+
 function appendMessage(msg, isSent, container) {
     const wrapper = document.createElement('div');
     wrapper.className = 'message-wrapper ' + (isSent ? 'sent' : 'received');
-    wrapper.id = 'msg-' + msg.id;
 
-    // Avatar
     let avatarHtml = '';
     if (!isSent) {
         if (msg.sender_pic) {
             avatarHtml = `<img class="msg-avatar" src="${msg.sender_pic}" alt="${msg.sender_username}">`;
-        } else {
+        } else if (msg.sender_username) {
             avatarHtml = `<div class="msg-avatar-placeholder">${msg.sender_username[0].toUpperCase()}</div>`;
         }
     }
@@ -117,61 +283,10 @@ function appendMessage(msg, isSent, container) {
     container.appendChild(wrapper);
 }
 
-// ---- Send a message ----
-function sendMessage() {
-    const input = document.getElementById('messageInput');
-    const content = input.value.trim();
-    if (!content || !activeUserId) return;
+// ============================================================
+// UI HELPERS
+// ============================================================
 
-    input.value = '';
-
-    fetch('/send_message/', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': CSRF_TOKEN,
-        },
-        body: JSON.stringify({
-            receiver_id: activeUserId,
-            content: content,
-        }),
-    })
-    .then(res => res.json())
-    .then(msg => {
-        if (msg.error) {
-            console.error('Send error:', msg.error);
-            return;
-        }
-        const area = document.getElementById('messagesArea');
-        lastMessageId = Math.max(lastMessageId, msg.id);
-        appendMessage({
-            id: msg.id,
-            content: msg.content,
-            timestamp: msg.timestamp,
-            sender_id: CURRENT_USER_ID,
-            sender_username: '',
-            sender_pic: '',
-        }, true, area);
-        area.scrollTop = area.scrollHeight;
-
-        // Update sidebar preview
-        const preview = document.getElementById('last-msg-' + activeUserId);
-        const timeEl = document.getElementById('last-time-' + activeUserId);
-        if (preview) preview.textContent = msg.content;
-        if (timeEl) timeEl.textContent = msg.timestamp;
-    })
-    .catch(err => console.error('Send message error:', err));
-}
-
-// ---- Enter key to send ----
-function handleKeyDown(event) {
-    if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault();
-        sendMessage();
-    }
-}
-
-// ---- Filter contacts by search ----
 function filterContacts() {
     const query = document.getElementById('searchInput').value.toLowerCase();
     document.querySelectorAll('.contact-item').forEach(item => {
@@ -180,21 +295,29 @@ function filterContacts() {
     });
 }
 
-// ---- Profile modal ----
+// Profile modal
 function openProfileModal() {
     document.getElementById('profileModal').classList.add('open');
 }
-
 function closeProfileModal() {
     document.getElementById('profileModal').classList.remove('open');
 }
-
-// Close modal if clicking outside
 document.getElementById('profileModal').addEventListener('click', function(e) {
     if (e.target === this) closeProfileModal();
 });
 
-// ---- Profile picture preview ----
+// Signout modal
+function openSignoutModal() {
+    document.getElementById('signoutModal').classList.add('open');
+}
+function closeSignoutModal() {
+    document.getElementById('signoutModal').classList.remove('open');
+}
+document.getElementById('signoutModal').addEventListener('click', function(e) {
+    if (e.target === this) closeSignoutModal();
+});
+
+// Profile picture preview
 function previewImage(input) {
     if (input.files && input.files[0]) {
         const reader = new FileReader();
@@ -204,7 +327,6 @@ function previewImage(input) {
             if (preview) {
                 preview.src = e.target.result;
             } else if (placeholder) {
-                // Replace placeholder with img
                 const img = document.createElement('img');
                 img.className = 'modal-avatar-preview';
                 img.id = 'modalPreviewImg';
@@ -216,34 +338,16 @@ function previewImage(input) {
     }
 }
 
-// ---- Poll unread counts for sidebar badges ----
-function pollUnreadCounts() {
-    if (!activeUserId) return; // Only check if in a chat
-    fetch('/get_unread_counts/')
-        .then(res => res.json())
-        .then(data => {
-            if (!data.counts) return;
-            for (const [uid, count] of Object.entries(data.counts)) {
-                if (parseInt(uid) === activeUserId) continue; // Don't badge active chat
-                const badge = document.getElementById('unread-' + uid);
-                if (!badge) continue;
-                if (count > 0) {
-                    badge.style.display = 'flex';
-                    badge.textContent = count;
-                } else {
-                    badge.style.display = 'none';
-                }
-            }
-        })
-        .catch(() => {});
-}
-
-// Poll for unread badges every 5 seconds
-setInterval(pollUnreadCounts, 5000);
-
-// ---- Escape HTML to prevent XSS ----
+// Escape HTML to prevent XSS
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.appendChild(document.createTextNode(text));
     return div.innerHTML;
 }
+
+// ============================================================
+// INIT — runs on page load
+// ============================================================
+
+requestNotificationPermission();
+connectNotifications();

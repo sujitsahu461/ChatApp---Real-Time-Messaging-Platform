@@ -2,9 +2,7 @@ from django.shortcuts import render, redirect
 from django.contrib.auth.models import User
 from django.contrib.auth import login, logout, authenticate
 from django.http import JsonResponse
-from django.views.decorators.http import require_POST
-from django.contrib.auth.decorators import login_required
-from .models import UserProfile, Message
+from .models import UserProfile, Message, OTPCode
 import json
 
 # Create your views here.
@@ -12,7 +10,6 @@ import json
 def home(request):
     if request.user.is_authenticated:
         users = User.objects.exclude(id=request.user.id)
-        # Ensure profile exists
         UserProfile.objects.get_or_create(user=request.user)
         return render(request, 'home.html', {'users': users})
     else:
@@ -41,6 +38,7 @@ def signout(request):
 def signup(request):
     if request.method == "POST":
         username = request.POST.get('username')
+        phone = request.POST.get('phone')
         password = request.POST.get('password')
         confpassword = request.POST.get('confirmpassword')
 
@@ -50,19 +48,86 @@ def signup(request):
         if password != confpassword:
             return render(request, "signup.html", {'error': 'Passwords do not match'})
 
-        if not password or not username:
-            return render(request, "signup.html", {'error': 'Username and password are required'})
+        if not password or not username or not phone:
+            return render(request, "signup.html", {'error': 'All fields are required'})
 
-        try:
-            user = User.objects.create_user(username=username, password=password)
-            user.save()
-            UserProfile.objects.create(user=user)
-            login(request, user)
-            return redirect('/')
-        except Exception as e:
-            return render(request, "signup.html", {'error': 'Error creating account: ' + str(e)})
+        if len(phone) < 10:
+            return render(request, "signup.html", {'error': 'Enter a valid phone number'})
+
+        # Generate OTP and print to console (dev mode)
+        code = OTPCode.generate_code()
+        OTPCode.objects.create(
+            phone_number=phone,
+            code=code,
+            username=username,
+            password=password,
+        )
+
+        # Print OTP to terminal for testing
+        print(f"\n{'='*50}")
+        print(f"  📱 OTP for {phone}: {code}")
+        print(f"{'='*50}\n")
+
+        # Store in session for OTP verification page
+        request.session['otp_phone'] = phone
+        request.session['otp_username'] = username
+
+        return redirect('/verify_otp/')
+
     else:
         return render(request, "signup.html")
+
+def verify_otp(request):
+    phone = request.session.get('otp_phone')
+    username = request.session.get('otp_username')
+
+    if not phone or not username:
+        return redirect('/signup/')
+
+    if request.method == 'POST':
+        entered_code = request.POST.get('otp', '')
+
+        # Find the latest unused OTP for this phone
+        otp_obj = OTPCode.objects.filter(
+            phone_number=phone,
+            username=username,
+            is_used=False,
+        ).order_by('-created_at').first()
+
+        if not otp_obj:
+            return render(request, 'verify_otp.html', {
+                'error': 'OTP expired. Please sign up again.',
+                'phone': phone,
+            })
+
+        if otp_obj.code != entered_code:
+            return render(request, 'verify_otp.html', {
+                'error': 'Invalid OTP. Please try again.',
+                'phone': phone,
+            })
+
+        # OTP is correct — create the user
+        otp_obj.is_used = True
+        otp_obj.save()
+
+        try:
+            user = User.objects.create_user(username=otp_obj.username, password=otp_obj.password)
+            user.save()
+            profile = UserProfile.objects.create(user=user, phone_number=phone)
+            login(request, user)
+
+            # Clean session
+            del request.session['otp_phone']
+            del request.session['otp_username']
+
+            return redirect('/')
+        except Exception as e:
+            return render(request, 'verify_otp.html', {
+                'error': f'Error creating account: {str(e)}',
+                'phone': phone,
+            })
+    else:
+        return render(request, 'verify_otp.html', {'phone': phone})
 
 def upload(request):
     if request.user.is_authenticated:
@@ -80,6 +145,25 @@ def upload(request):
     else:
         return redirect('/signin')
 
+def get_profile(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Not authenticated'}, status=401)
+    try:
+        profile = request.user.userprofile
+        pic_url = profile.profile_pic.url if profile.profile_pic else ''
+        return JsonResponse({
+            'username': request.user.username,
+            'phone': profile.phone_number or '',
+            'pic': pic_url,
+        })
+    except UserProfile.DoesNotExist:
+        return JsonResponse({
+            'username': request.user.username,
+            'phone': '',
+            'pic': '',
+        })
+
+# Keep these for fallback / initial load
 def send_message(request):
     if not request.user.is_authenticated:
         return JsonResponse({'error': 'Not authenticated'}, status=401)
@@ -117,8 +201,6 @@ def get_messages(request, user_id):
             sender=other_user, receiver=request.user
         )
         messages = messages.order_by('timestamp')
-
-        # Mark received messages as read
         Message.objects.filter(sender=other_user, receiver=request.user, is_read=False).update(is_read=True)
 
         data = []
