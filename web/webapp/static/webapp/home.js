@@ -8,6 +8,34 @@ let activeUserPic = null;
 let chatSocket = null;
 let notifSocket = null;
 let notifToastTimeout = null;
+let onlineUserIds = new Set();
+
+// ============================================================
+// ONLINE STATUS
+// ============================================================
+
+function updateOnlineStatus(userId, status) {
+    const dot = document.getElementById('online-dot-' + userId);
+    if (dot) {
+        dot.classList.toggle('online', status === 'online');
+    }
+
+    // Update chat header if we're chatting with this user
+    if (userId === activeUserId) {
+        const headerStatus = document.getElementById('chatHeaderStatus');
+        if (headerStatus) {
+            headerStatus.textContent = status === 'online' ? 'online' : 'offline';
+            headerStatus.style.color = status === 'online' ? '#00a884' : '#8696a0';
+        }
+    }
+}
+
+function setAllOnlineStatuses() {
+    document.querySelectorAll('.online-dot').forEach(dot => {
+        const uid = parseInt(dot.dataset.userid);
+        dot.classList.toggle('online', onlineUserIds.has(uid));
+    });
+}
 
 // ============================================================
 // NOTIFICATION SYSTEM — connects on page load
@@ -23,6 +51,24 @@ function connectNotifications() {
 
     notifSocket.onmessage = (e) => {
         const data = JSON.parse(e.data);
+
+        // Handle online users list (sent on connect)
+        if (data.type === 'online_users') {
+            onlineUserIds = new Set(data.users);
+            setAllOnlineStatuses();
+        }
+
+        // Handle presence updates (user comes online/offline)
+        if (data.type === 'presence') {
+            if (data.status === 'online') {
+                onlineUserIds.add(data.user_id);
+            } else {
+                onlineUserIds.delete(data.user_id);
+            }
+            updateOnlineStatus(data.user_id, data.status);
+        }
+
+        // Handle chat notifications
         if (data.type === 'notification') {
             const msg = data.message;
             // Don't notify if we're already chatting with this person
@@ -78,7 +124,6 @@ function showBrowserNotification(msg) {
         });
         notif.onclick = () => {
             window.focus();
-            // Open chat with this user
             const contactEl = document.getElementById('contact-' + msg.sender_id);
             if (contactEl) {
                 const pic = contactEl.dataset.pic || '';
@@ -105,7 +150,6 @@ function showNotificationToast(msg) {
     nameEl.textContent = msg.sender_username;
     msgEl.textContent = msg.content;
 
-    // Click toast to open chat
     toast.onclick = () => {
         hideNotificationToast();
         const contactEl = document.getElementById('contact-' + msg.sender_id);
@@ -157,6 +201,12 @@ function openChat(userId, username, picUrl) {
     }
     document.getElementById('chatHeaderName').textContent = username;
 
+    // Update online status in header
+    const headerStatus = document.getElementById('chatHeaderStatus');
+    const isOnline = onlineUserIds.has(userId);
+    headerStatus.textContent = isOnline ? 'online' : 'offline';
+    headerStatus.style.color = isOnline ? '#00a884' : '#8696a0';
+
     // Clear messages
     document.getElementById('messagesArea').innerHTML = '';
 
@@ -181,7 +231,6 @@ function openChat(userId, username, picUrl) {
         const data = JSON.parse(e.data);
 
         if (data.type === 'history') {
-            // Render all history messages
             const area = document.getElementById('messagesArea');
             area.innerHTML = '';
             data.messages.forEach(msg => {
@@ -190,7 +239,6 @@ function openChat(userId, username, picUrl) {
             });
             area.scrollTop = area.scrollHeight;
 
-            // Update sidebar preview from last message
             if (data.messages.length > 0) {
                 const lastMsg = data.messages[data.messages.length - 1];
                 const preview = document.getElementById('last-msg-' + activeUserId);
@@ -207,7 +255,6 @@ function openChat(userId, username, picUrl) {
             appendMessage(msg, isSent, area);
             area.scrollTop = area.scrollHeight;
 
-            // Update sidebar
             const preview = document.getElementById('last-msg-' + activeUserId);
             const timeEl = document.getElementById('last-time-' + activeUserId);
             if (preview) preview.textContent = msg.content;
@@ -219,7 +266,6 @@ function openChat(userId, username, picUrl) {
         console.log('💬 Chat WebSocket disconnected');
         connStatus.classList.add('disconnected');
         connStatus.textContent = '🔄 Reconnecting...';
-        // Auto-reconnect after 3 seconds if chat is still active
         setTimeout(() => {
             if (activeUserId === userId) {
                 openChat(userId, username, picUrl);

@@ -519,6 +519,27 @@
         }
         .signout-modal .btn-confirm:hover { background: #cc0000; }
 
+        /* ========== ONLINE DOT ========== */
+        .avatar-wrapper {
+            position: relative;
+            display: inline-block;
+            flex-shrink: 0;
+        }
+        .online-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #6b7c85;
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            border: 2px solid #202c33;
+            transition: background 0.3s;
+        }
+        .online-dot.online {
+            background: #00a884;
+        }
+
         /* ========== NOTIFICATION TOAST ========== */
         .notification-toast {
             position: fixed;
@@ -635,11 +656,14 @@
     <div class="contacts-list" id="contactsList">
         {% for user in users %}
         <div class="contact-item" id="contact-{{ user.id }}" data-userid="{{ user.id }}" data-username="{{ user.username }}" data-pic="{% if user.userprofile.profile_pic %}{{ user.userprofile.profile_pic.url }}{% endif %}" onclick="openChat({{ user.id }}, '{{ user.username }}', '{% if user.userprofile.profile_pic %}{{ user.userprofile.profile_pic.url }}{% endif %}')">
-            {% if user.userprofile.profile_pic %}
-                <img class="contact-avatar" src="{{ user.userprofile.profile_pic.url }}" alt="{{ user.username }}">
-            {% else %}
-                <div class="contact-avatar-placeholder">{{ user.username|first|upper }}</div>
-            {% endif %}
+            <div class="avatar-wrapper">
+                {% if user.userprofile.profile_pic %}
+                    <img class="contact-avatar" src="{{ user.userprofile.profile_pic.url }}" alt="{{ user.username }}">
+                {% else %}
+                    <div class="contact-avatar-placeholder">{{ user.username|first|upper }}</div>
+                {% endif %}
+                <span class="online-dot" id="online-dot-{{ user.id }}" data-userid="{{ user.id }}"></span>
+            </div>
             <div class="contact-info">
                 <div class="contact-name">{{ user.username }}</div>
                 <div class="contact-last-msg" id="last-msg-{{ user.id }}">Click to start chatting</div>
@@ -670,7 +694,7 @@
             <div id="chatHeaderAvatar"></div>
             <div class="chat-header-info">
                 <div class="chat-header-name" id="chatHeaderName"></div>
-                <div class="chat-header-status" id="chatHeaderStatus">online</div>
+                <div class="chat-header-status" id="chatHeaderStatus" style="color:#8696a0">offline</div>
             </div>
         </div>
 
