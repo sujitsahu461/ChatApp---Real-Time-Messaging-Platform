@@ -30,6 +30,7 @@ template = BASE_DIR / 'template'
 # SECURITY: Never hardcode SECRET_KEY. Always use environment variable.
 SECRET_KEY = os.environ.get('SECRET_KEY')
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
+SHOW_OTP_ON_PAGE = os.environ.get('SHOW_OTP_ON_PAGE', 'False') == 'True'
 
 if not SECRET_KEY:
     if DEBUG:

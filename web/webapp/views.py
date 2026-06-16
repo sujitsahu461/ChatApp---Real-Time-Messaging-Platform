@@ -97,6 +97,9 @@ def signup(request):
         # Store in session for OTP verification page
         request.session['otp_phone'] = phone
         request.session['otp_username'] = username
+        from django.conf import settings
+        if getattr(settings, 'SHOW_OTP_ON_PAGE', False):
+            request.session['otp_debug_code'] = code
 
         return redirect('/verify_otp/')
 
@@ -107,18 +110,25 @@ def signup(request):
 def verify_otp(request):
     phone = request.session.get('otp_phone')
     username = request.session.get('otp_username')
+    from django.conf import settings
+    debug_otp = request.session.get('otp_debug_code') if getattr(settings, 'SHOW_OTP_ON_PAGE', False) else None
 
     if not phone or not username:
         return redirect('/signup/')
+
+    def render_verify(error_msg=None):
+        ctx = {'phone': phone}
+        if error_msg:
+            ctx['error'] = error_msg
+        if debug_otp:
+            ctx['debug_otp'] = debug_otp
+        return render(request, 'verify_otp.html', ctx)
 
     if request.method == 'POST':
         entered_code = request.POST.get('otp', '').strip()
 
         if not entered_code or len(entered_code) != 6:
-            return render(request, 'verify_otp.html', {
-                'error': 'Please enter a valid 6-digit OTP.',
-                'phone': phone,
-            })
+            return render_verify('Please enter a valid 6-digit OTP.')
 
         # Find the latest unused OTP for this phone + username
         otp_obj = OTPCode.objects.filter(
@@ -128,24 +138,15 @@ def verify_otp(request):
         ).order_by('-created_at').first()
 
         if not otp_obj:
-            return render(request, 'verify_otp.html', {
-                'error': 'OTP expired or not found. Please sign up again.',
-                'phone': phone,
-            })
+            return render_verify('OTP expired or not found. Please sign up again.')
 
         # Check expiry
         if otp_obj.is_expired():
             otp_obj.delete()
-            return render(request, 'verify_otp.html', {
-                'error': 'OTP expired (valid for 5 minutes). Please sign up again.',
-                'phone': phone,
-            })
+            return render_verify('OTP expired (valid for 5 minutes). Please sign up again.')
 
         if otp_obj.code != entered_code:
-            return render(request, 'verify_otp.html', {
-                'error': 'Invalid OTP. Please try again.',
-                'phone': phone,
-            })
+            return render_verify('Invalid OTP. Please try again.')
 
         # OTP is correct — create the user
         otp_obj.is_used = True
@@ -163,15 +164,13 @@ def verify_otp(request):
             # Clean session
             request.session.pop('otp_phone', None)
             request.session.pop('otp_username', None)
+            request.session.pop('otp_debug_code', None)
 
             return redirect('/')
         except Exception as e:
-            return render(request, 'verify_otp.html', {
-                'error': f'Error creating account: {str(e)}',
-                'phone': phone,
-            })
+            return render_verify(f'Error creating account: {str(e)}')
 
-    return render(request, 'verify_otp.html', {'phone': phone})
+    return render_verify()
 
 
 # =============================================================================

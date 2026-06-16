@@ -165,6 +165,12 @@
                 <div class="error-msg">⚠️ {{ error }}</div>
             {% endif %}
 
+            {% if debug_otp %}
+                <div style="background: rgba(0, 168, 132, 0.15); border: 1px solid rgba(0, 168, 132, 0.4); color: #00c49e; padding: 12px 16px; border-radius: 8px; font-size: 14px; margin-bottom: 20px; font-weight: 600;">
+                    🔑 DEMO OTP: <span style="font-family: monospace; font-size: 18px; letter-spacing: 2px;">{{ debug_otp }}</span>
+                </div>
+            {% endif %}
+
             <form method="post" action="" id="otpForm">
                 {% csrf_token %}
                 <div class="otp-inputs">
