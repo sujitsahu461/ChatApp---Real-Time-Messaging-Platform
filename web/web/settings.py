@@ -10,26 +10,44 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
+from dotenv import load_dotenv
+import dj_database_url
+
+# Load .env file for local development
+load_dotenv(Path(__file__).resolve().parent.parent.parent / '.env')
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 template = BASE_DIR / 'template'
 
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
+# =============================================================================
+# CORE SETTINGS
+# =============================================================================
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-768lor-v%q!9&eyn-5omv+r0$+tb(23&^!ii=e)hwquei1vitr'
+# SECURITY: Never hardcode SECRET_KEY. Always use environment variable.
+SECRET_KEY = os.environ.get('SECRET_KEY')
+DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = 'dev-only-insecure-key-change-in-production-abc123xyz'
+    else:
+        raise ValueError(
+            'SECRET_KEY environment variable is required in production. '
+            'Generate one with: python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"'
+        )
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    h.strip() for h in os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if h.strip()
+]
 
 
-# Application definition
+# =============================================================================
+# APPLICATION DEFINITION
+# =============================================================================
 
 INSTALLED_APPS = [
     'daphne',
@@ -45,6 +63,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',       # Static file serving in production
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -81,58 +100,97 @@ CHANNEL_LAYERS = {
 }
 
 
-# Database
-# https://docs.djangoproject.com/en/6.0/ref/settings/#databases
+# =============================================================================
+# DATABASE — Uses DATABASE_URL env var (PostgreSQL on Render, MySQL locally)
+# =============================================================================
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'web',
-        'PASSWORD':"ROOT",
-        'USER': 'root',
-        'HOST': 'localhost',
-
-
-    }
+    'default': dj_database_url.config(
+        default='mysql://root:ROOT@localhost/web',
+        conn_max_age=600,
+    )
 }
 
 
-# Password validation
-# https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
+# =============================================================================
+# PASSWORD VALIDATION
+# =============================================================================
 
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
 
-# Internationalization
-# https://docs.djangoproject.com/en/6.0/topics/i18n/
+# =============================================================================
+# INTERNATIONALIZATION
+# =============================================================================
 
 LANGUAGE_CODE = 'en-us'
-
 TIME_ZONE = 'Asia/Kolkata'
-
 USE_I18N = True
-
 USE_TZ = True
 
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/6.0/howto/static-files/
+# =============================================================================
+# STATIC & MEDIA FILES
+# =============================================================================
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# Media files
+# WhiteNoise compressed static file serving
+STORAGES = {
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
+
+# Media files (user uploads)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+
+# =============================================================================
+# SECURITY SETTINGS (production hardening)
+# =============================================================================
+
+# HTTPS / SSL — Render provides SSL termination
+SECURE_SSL_REDIRECT = not DEBUG
+SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0   # 1 year HSTS in production
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
+SECURE_HSTS_PRELOAD = not DEBUG
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Cookie security
+SESSION_COOKIE_SECURE = not DEBUG          # HTTPS-only session cookie
+CSRF_COOKIE_SECURE = not DEBUG             # HTTPS-only CSRF cookie
+SESSION_COOKIE_HTTPONLY = True              # No JavaScript access to session
+CSRF_COOKIE_HTTPONLY = True                 # No JavaScript access to CSRF token
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 7      # 7 days session expiry
+SESSION_COOKIE_SAMESITE = 'Lax'
+
+# Content security
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_BROWSER_XSS_FILTER = True
+X_FRAME_OPTIONS = 'DENY'
+
+# Upload limits
+DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024    # 5MB max request body
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024    # 5MB max file upload
+
+
+# =============================================================================
+# DEFAULT PRIMARY KEY
+# =============================================================================
+
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+# =============================================================================
+# LOGIN REDIRECT
+# =============================================================================
+
+LOGIN_URL = '/signin/'

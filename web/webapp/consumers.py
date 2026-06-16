@@ -1,4 +1,6 @@
 import json
+import time
+from collections import defaultdict
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth.models import User
@@ -7,6 +9,19 @@ from .models import Message, UserProfile, ChatGroup, GroupMessage
 
 # Track online users globally
 online_users = set()
+
+# Simple in-memory rate limiter for WebSocket messages
+# Format: {user_id: [timestamp1, timestamp2, ...]}
+_ws_rate_tracker = defaultdict(list)
+WS_RATE_LIMIT = 30      # max messages
+WS_RATE_WINDOW = 60     # per 60 seconds
+
+# Valid message types
+VALID_MESSAGE_TYPES = {'text', 'voice', 'call'}
+
+# Max message content length
+MAX_TEXT_LENGTH = 5_000
+MAX_VOICE_LENGTH = 500_000
 
 
 def format_time(dt):
@@ -21,6 +36,21 @@ def format_date(dt):
     return local_dt.strftime('%d %b %Y')
 
 
+def check_ws_rate_limit(user_id):
+    """Return True if the user is within rate limits, False if exceeding."""
+    now = time.time()
+    timestamps = _ws_rate_tracker[user_id]
+
+    # Remove timestamps older than the window
+    _ws_rate_tracker[user_id] = [t for t in timestamps if now - t < WS_RATE_WINDOW]
+
+    if len(_ws_rate_tracker[user_id]) >= WS_RATE_LIMIT:
+        return False
+
+    _ws_rate_tracker[user_id].append(now)
+    return True
+
+
 class ChatConsumer(AsyncWebsocketConsumer):
     """Handles direct 1-to-1 chat WebSocket connections."""
 
@@ -32,6 +62,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         self.other_user_id = int(self.scope['url_route']['kwargs']['user_id'])
 
+        # Prevent connecting to yourself
+        if self.user.id == self.other_user_id:
+            await self.close()
+            return
+
         # Create a consistent room name for both users
         ids = sorted([self.user.id, self.other_user_id])
         self.room_name = f'chat_{ids[0]}_{ids[1]}'
@@ -39,7 +74,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         await self.channel_layer.group_add(self.room_name, self.channel_name)
         await self.accept()
 
-        # Send chat history
+        # Send chat history (last 50 messages)
         messages = await self.get_messages()
         await self.send(text_data=json.dumps({
             'type': 'history',
@@ -51,7 +86,16 @@ class ChatConsumer(AsyncWebsocketConsumer):
             await self.channel_layer.group_discard(self.room_name, self.channel_name)
 
     async def receive(self, text_data):
-        data = json.loads(text_data)
+        # Parse JSON safely
+        try:
+            data = json.loads(text_data)
+        except (json.JSONDecodeError, ValueError):
+            return  # Silently ignore malformed JSON
+
+        if not isinstance(data, dict):
+            return
+
+        # Handle call signaling
         if data.get('type') == 'call_signal':
             await self.channel_layer.group_send(self.room_name, {
                 'type': 'call_signal',
@@ -60,9 +104,32 @@ class ChatConsumer(AsyncWebsocketConsumer):
             })
             return
 
-        content = data.get('message', '').strip()
+        content = data.get('message', '')
+        if not isinstance(content, str):
+            return
+        content = content.strip()
+
         message_type = data.get('message_type', 'text')
+
+        # Validate message type
+        if message_type not in VALID_MESSAGE_TYPES:
+            return
+
+        # Validate message content
         if not content:
+            return
+
+        # Validate message length
+        max_len = MAX_VOICE_LENGTH if message_type == 'voice' else MAX_TEXT_LENGTH
+        if len(content) > max_len:
+            return
+
+        # Rate limiting
+        if not check_ws_rate_limit(self.user.id):
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Too many messages. Please slow down.',
+            }))
             return
 
         # Save message to DB
@@ -137,7 +204,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
         ) | Message.objects.filter(
             sender_id=self.other_user_id, receiver_id=self.user.id
         )
-        messages = messages.order_by('timestamp')
+        # Paginate: last 50 messages only
+        messages = messages.select_related(
+            'sender__userprofile'
+        ).order_by('-timestamp')[:50]
 
         # Mark received messages as read
         Message.objects.filter(
@@ -145,7 +215,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         ).update(is_read=True)
 
         data = []
-        for msg in messages:
+        for msg in reversed(messages):  # Reverse for chronological order
             try:
                 pic_url = msg.sender.userprofile.profile_pic.url if msg.sender.userprofile.profile_pic else ''
             except Exception:
@@ -182,6 +252,7 @@ class GroupChatConsumer(AsyncWebsocketConsumer):
         await self.channel_layer.group_add(self.room_name, self.channel_name)
         await self.accept()
 
+        # Send last 50 messages
         messages = await self.get_messages()
         await self.send(text_data=json.dumps({
             'type': 'history',
@@ -193,10 +264,40 @@ class GroupChatConsumer(AsyncWebsocketConsumer):
             await self.channel_layer.group_discard(self.room_name, self.channel_name)
 
     async def receive(self, text_data):
-        data = json.loads(text_data)
-        content = data.get('message', '').strip()
+        # Parse JSON safely
+        try:
+            data = json.loads(text_data)
+        except (json.JSONDecodeError, ValueError):
+            return
+
+        if not isinstance(data, dict):
+            return
+
+        content = data.get('message', '')
+        if not isinstance(content, str):
+            return
+        content = content.strip()
+
         message_type = data.get('message_type', 'text')
+
+        # Validate message type
+        if message_type not in VALID_MESSAGE_TYPES:
+            return
+
         if not content:
+            return
+
+        # Validate message length
+        max_len = MAX_VOICE_LENGTH if message_type == 'voice' else MAX_TEXT_LENGTH
+        if len(content) > max_len:
+            return
+
+        # Rate limiting
+        if not check_ws_rate_limit(self.user.id):
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Too many messages. Please slow down.',
+            }))
             return
 
         msg_data = await self.save_message(content, message_type)
@@ -270,8 +371,13 @@ class GroupChatConsumer(AsyncWebsocketConsumer):
     @database_sync_to_async
     def get_messages(self):
         group = ChatGroup.objects.get(id=self.group_id, members=self.user)
+        # Paginate: last 50 messages
+        msgs = group.messages.select_related(
+            'sender', 'sender__userprofile'
+        ).order_by('-timestamp')[:50]
+
         data = []
-        for msg in group.messages.select_related('sender', 'sender__userprofile').all():
+        for msg in reversed(msgs):  # Reverse for chronological order
             try:
                 pic_url = msg.sender.userprofile.profile_pic.url if msg.sender.userprofile.profile_pic else ''
             except Exception:

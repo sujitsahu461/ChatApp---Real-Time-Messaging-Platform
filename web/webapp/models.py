@@ -1,15 +1,16 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.utils import timezone
+from datetime import timedelta
 import random
 import string
 
-# Create your models here.
 
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     profile_pic = models.ImageField(upload_to='profile_pics/', blank=True, null=True)
     phone_number = models.CharField(max_length=15, blank=True, null=True)
-    
+
     def __str__(self):
         return f"{self.user.username}'s Profile"
 
@@ -65,16 +66,28 @@ class GroupMessage(models.Model):
 
 
 class OTPCode(models.Model):
+    OTP_EXPIRY_MINUTES = 5
+
     phone_number = models.CharField(max_length=15)
     code = models.CharField(max_length=6)
     username = models.CharField(max_length=150)
-    password = models.CharField(max_length=150)  # Temporarily store hashed
+    password = models.CharField(max_length=150)  # Stores HASHED password
     created_at = models.DateTimeField(auto_now_add=True)
     is_used = models.BooleanField(default=False)
 
     def __str__(self):
         return f"OTP {self.code} for {self.phone_number}"
 
+    def is_expired(self):
+        """Check if OTP has expired (default: 5 minutes)."""
+        return timezone.now() > self.created_at + timedelta(minutes=self.OTP_EXPIRY_MINUTES)
+
     @staticmethod
     def generate_code():
         return ''.join(random.choices(string.digits, k=6))
+
+    @classmethod
+    def cleanup_stale(cls):
+        """Delete all unused OTPs older than 30 minutes."""
+        cutoff = timezone.now() - timedelta(minutes=30)
+        cls.objects.filter(created_at__lt=cutoff, is_used=False).delete()

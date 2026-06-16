@@ -29,6 +29,7 @@ local_settings.py
 db.sqlite3
 /media/
 /static/
+web/staticfiles/
 
 # IDE
 .vscode/
@@ -41,6 +42,7 @@ db.sqlite3
 # Environment
 .env
 .env.local
+.env.production
 
 # Personal notes
 MY_COMMANDS.txt
