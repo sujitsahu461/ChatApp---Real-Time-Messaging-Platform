@@ -3,7 +3,7 @@ daphne==4.2.1
 channels==4.2.2
 mysqlclient==2.2.0
 Pillow>=10.4.0
-psycopg2-binary==2.9.9
+psycopg2-binary==2.9.9; sys_platform != "win32"
 dj-database-url==2.1.0
 whitenoise==6.6.0
 django-ratelimit==4.1.0
