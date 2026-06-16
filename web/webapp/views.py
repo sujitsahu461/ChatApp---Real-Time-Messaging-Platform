@@ -90,9 +90,9 @@ def signup(request):
         )
 
         # Print OTP to terminal for testing (replace with SMS API in production)
-        print(f"\n{'='*50}")
-        print(f"  OTP for {phone}: {code}")
-        print(f"{'='*50}\n")
+        print(f"\n{'='*50}", flush=True)
+        print(f"  OTP for {phone}: {code}", flush=True)
+        print(f"{'='*50}\n", flush=True)
 
         # Store in session for OTP verification page
         request.session['otp_phone'] = phone
